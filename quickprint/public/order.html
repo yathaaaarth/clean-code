@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Track Order - QuickPrint</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: system-ui, -apple-system, sans-serif; background: #f1f5f9; color: #0f172a; min-height: 100vh; }
+  .card { max-width: 420px; margin: 60px auto; background: #fff; border-radius: 14px; padding: 28px; text-align: center; box-shadow: 0 1px 3px rgba(0,0,0,.08); }
+  .qno { font-size: 56px; font-weight: 800; color: #2563eb; line-height: 1; }
+  .qno small { display: block; font-size: 13px; font-weight: 500; color: #64748b; margin-bottom: 4px; }
+  .pill { display: inline-block; padding: 4px 14px; border-radius: 99px; font-size: 13px; font-weight: 700; margin: 10px 0; }
+  .pill.waiting { background: #fef3c7; color: #92400e; }
+  .pill.printing { background: #dbeafe; color: #1e40af; }
+  .pill.done { background: #dcfce7; color: #166534; }
+  .muted { font-size: 13px; color: #64748b; margin-top: 6px; }
+  .steps { display: flex; justify-content: space-between; margin: 24px 0 8px; }
+  .step { flex: 1; font-size: 11px; color: #94a3b8; position: relative; padding-top: 8px; }
+  .step::before { content: ''; position: absolute; top: 0; left: 50%; transform: translateX(-50%); width: 8px; height: 8px; border-radius: 50%; background: #cbd5e1; }
+  .step.on { color: #2563eb; }
+  .step.on::before { background: #2563eb; }
+  .err { color: #b91c1c; margin-top: 12px; }
+</style>
+</head>
+<body>
+<div class="card">
+  <div class="qno"><small>QuickPrint</small><span id="no">#-</span></div>
+  <span class="pill waiting" id="status">waiting</span>
+  <p class="muted" id="name"></p>
+  <p class="muted" id="amt"></p>
+  <div class="steps">
+    <div class="step on" id="st1">Uploaded</div>
+    <div class="step" id="st2">Printing</div>
+    <div class="step" id="st3">Done</div>
+  </div>
+  <p class="muted" style="margin-top:16px">This page refreshes automatically.</p>
+  <div class="err" id="err" style="display:none">Order not found</div>
+</div>
+<script>
+const q = new URLSearchParams(location.search).get('q');
+const labels = { waiting: 'Waiting to print', printing: 'Printing now', done: 'Ready - printed' };
+async function poll() {
+  const r = await fetch('/api/orders/' + q);
+  if (!r.ok) { document.getElementById('err').style.display = 'block'; return; }
+  const d = await r.json(), o = d.order;
+  document.getElementById('no').textContent = '#' + o.queueNo;
+  const s = document.getElementById('status');
+  s.textContent = labels[o.status];
+  s.className = 'pill ' + o.status;
+  document.getElementById('name').textContent = 'Name: ' + o.name;
+  document.getElementById('amt').textContent = 'Amount: ₹' + o.amount + (o.paid ? '  •  Paid ✓' : '');
+  document.getElementById('st1').classList.add('on');
+  document.getElementById('st2').className = 'step' + (o.status === 'printing' || o.status === 'done' ? ' on' : '');
+  document.getElementById('st3').className = 'step' + (o.status === 'done' ? ' on' : '');
+}
+poll();
+setInterval(poll, 5000);
+</script>
+</body>
+</html>

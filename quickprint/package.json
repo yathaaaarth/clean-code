@@ -1,0 +1,15 @@
+{
+  "name": "quickprint",
+  "version": "1.0.0",
+  "description": "Print shop remote upload + self-service queue portal",
+  "main": "server.js",
+  "scripts": {
+    "start": "node --env-file-if-exists=.env server.js"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "multer": "^2.4.0",
+    "qrcode": "^1.5.4",
+    "razorpay": "^2.9.8"
+  }
+}

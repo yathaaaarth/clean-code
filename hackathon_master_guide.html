@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Hackathon Master Guide — Backend &amp; System Architecture</title>
+<style>
+  @page { size: A4; margin: 16mm 14mm 18mm 14mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Arial, sans-serif;
+    font-size: 12.5px; line-height: 1.55; color: #1f2430;
+    margin: 0; padding: 0;
+  }
+  h1 { font-size: 24px; margin: 0 0 4px; color: #0b3d5c; }
+  h2 { font-size: 18px; margin: 26px 0 8px; color: #ffffff; background: #0b3d5c; padding: 6px 10px; border-radius: 4px; page-break-after: avoid; }
+  h3 { font-size: 14.5px; margin: 18px 0 4px; color: #0b3d5c; border-bottom: 2px solid #dce7f0; padding-bottom: 2px; page-break-after: avoid; }
+  h4 { font-size: 13px; margin: 12px 0 3px; color: #154a68; page-break-after: avoid; }
+  p { margin: 5px 0; }
+  ul, ol { margin: 5px 0 8px; padding-left: 22px; }
+  li { margin: 2.5px 0; }
+  table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 12px; page-break-inside: avoid; }
+  th, td { border: 1px solid #c9d6e0; padding: 5px 8px; text-align: left; vertical-align: top; }
+  th { background: #e7eef5; color: #0b3d5c; }
+  code { font-family: "Consolas", monospace; font-size: 11.5px; background: #f0f4f8; padding: 1px 4px; border-radius: 3px; }
+  pre { font-family: "Consolas", monospace; font-size: 11px; background: #0f1e2e; color: #d8e6f2; padding: 10px 12px; border-radius: 5px; overflow-x: auto; line-height: 1.45; page-break-inside: avoid; }
+  pre code { background: none; padding: 0; color: inherit; }
+  .say { border-left: 4px solid #2e9e6b; background: #eaf6ef; padding: 7px 12px; margin: 8px 0; border-radius: 0 5px 5px 0; page-break-inside: avoid; }
+  .say b { color: #1e7a4e; }
+  .warn { border-left: 4px solid #d9822b; background: #fdf3e7; padding: 7px 12px; margin: 8px 0; border-radius: 0 5px 5px 0; page-break-inside: avoid; }
+  .box { border: 1px solid #c9d6e0; border-radius: 5px; padding: 8px 12px; margin: 8px 0; page-break-inside: avoid; }
+  .diagram { text-align: center; font-family: "Consolas", monospace; font-size: 11.5px; background: #f0f4f8; padding: 10px; border-radius: 5px; margin: 10px 0; line-height: 1.5; }
+  .meta { color: #5a6b7a; font-size: 11px; margin-bottom: 14px; }
+  .pagebreak { page-break-before: always; }
+  .qr { color:#7a1313; }
+</style>
+</head>
+<body>
+
+<h1>Fix My Grid — Master Tech Guide</h1>
+<p class="meta">Hackathon · Backend + System Architecture · Citizens report issues (potholes, broken lights, utilities) to the authority · v1.1 · Study top-to-bottom once, then drill the <b>&#9889; Say This</b> boxes out loud.</p>
+<div class="box"><b>Product in one line:</b> Fix My Grid lets a citizen snap/describe a civic issue, tag its GPS location, and submit it — the backend validates, stores, AI-grades, dedupes, and routes it to the right authority department.</div>
+
+<!-- ==================== PART 1 ==================== -->
+<h2>1 · The Architecture (one picture)</h2>
+<div class="diagram">
+Flutter (thin client)<br>
+&#9474;&nbsp;&nbsp;HTTPS + JSON + Bearer token<br>
+&#9660;<br>
+Django REST Framework &nbsp;&#8594;&nbsp; Serializers, Permissions, Viewsets<br>
+&#9660;<br>
+Django Business Logic<br>
+&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9516;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;<br>
+&nbsp;&#9660;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; &#9660;<br>
+PostgreSQL / PostGIS&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;Cloudflare R2 (images)<br>
+(users, reports, metadata)&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;(binary files, URLs only in DB)
+</div>
+
+<div class="say"><b>&#9889; Say This:</b> "Flutter is the thin client — it only renders UI and makes HTTP calls. All logic lives server-side in Django. DRF is the API layer that translates JSON to Python. PostgreSQL stores structured data; R2 stores the binary images. That separation lets us scale each piece independently."</div>
+
+<h3>Why Django?</h3>
+<ul>
+<li><b>Batteries included</b> — auth, ORM, admin, migrations ship built-in; we don't assemble foundations in 24 hours.</li>
+<li><b>DRF</b> — the #1 Python REST framework: serializers, permissions, throttling.</li>
+<li><b>Security defaults</b> — protection against SQL injection, XSS, CSRF, clickjacking on by default.</li>
+<li><b>Ecosystem</b> — django-storages, boto3, PostGIS all battle-tested.</li>
+</ul>
+
+<h3>Why PostgreSQL instead of MongoDB?</h3>
+<ul>
+<li><b>Relationships</b>: users <i>own</i> reports — a foreign key. Postgres enforces referential integrity; Mongo lets you store anything anywhere.</li>
+<li><b>PostGIS</b>: geo queries ("potholes near me") need it.</li>
+<li><b>ACID transactions</b>: report + image + severity must all succeed or all roll back — no half-written reports.</li>
+<li><b>SQL is mature</b>: predictable, works with every analytics tool.</li>
+</ul>
+<div class="say"><b>&#9889; Counter:</b> "MongoDB wins when the schema is unpredictable. Ours isn't — a report is a report. So a strongly-typed relational DB is the right tool."</div>
+
+<h3>Why PostGIS?</h3>
+<ul>
+<li>We are a <b>location-based app</b> — spatial data is the core product.</li>
+<li><code>ST_DWithin</code> / <code>ST_Distance</code> / <code>ST_Contains</code>: distance queries, bounding boxes, "within 2 km", "inside which district — all in one indexed SQL call.</li>
+<li><b>GiST spatial indexes</b> keep searches fast at millions of rows.</li>
+<li>One database does everything — no separate geo engine bolted on.</li>
+</ul>
+
+<!-- ==================== PART 2 ==================== -->
+<div class="pagebreak"></div>
+<h2>2 · Authentication (how it works, step by step)</h2>
+<p><b>Authentication = prove who you are. Authorization = prove what you're allowed to do.</b></p>
+<ol>
+<li>Flutter sends <code>POST /api/auth/login/</code> with username + password over <b>HTTPS</b> (never plain HTTP).</li>
+<li>Django hashes the incoming password and compares to the stored hash → match? Issue a token.</li>
+<li>Return <code>{"token": "abc123"}</code>. The app stores it securely and sends it on every request.</li>
+<li>Every request carries <code>Authorization: Bearer &lt;token&gt;</code>.</li>
+<li>DRF's auth backend validates the token, checks expiry, resolves <code>request.user</code>.</li>
+<li>Permission classes then decide <i>who may call this endpoint</i>; object checks decide <i>who may touch this row</i>.</li>
+</ol>
+
+<h3>Token vs Session</h3>
+<table>
+<tr><th></th><th>Session auth</th><th>Token auth (our choice)</th></tr>
+<tr><td>State</td><td>Server stores session, sends cookie</td><td>Stateless — no server memory</td></tr>
+<tr><td>Mobile fit</td><td>Cookies are awkward in apps</td><td>Header-based, app-friendly</td></tr>
+<tr><td>Scaling</td><td>Sticky sessions hurt horizontal scale</td><td>Any server can serve any request</td></tr>
+<tr><td>Revocation</td><td>Kill the session</td><td>Delete/expire the token</td></tr>
+</table>
+<div class="say"><b>&#9889; Say This:</b> "Token auth is stateless: login returns a token, the app sends it in the Authorization header, DRF resolves it per request. No session memory means we scale to many servers trivially."</div>
+
+<h3>Password hashing</h3>
+<ul>
+<li>We never store passwords — we store a <b>salted hash</b>. Hashing is one-way; encryption is reversible. We don't encrypt passwords.</li>
+<li><b>Salt</b> = random data per password → identical passwords produce different hashes; rainbow tables are useless.</li>
+<li><b>Slow algorithms</b> (PBKDF2 / Argon2 / bcrypt) make brute force expensive per guess. Django defaults to PBKDF2 with per-user salt.</li>
+<li>Verify = hash the input and compare digests; the plaintext never touches the DB or logs.</li>
+</ul>
+<div class="warn"><b>Recite:</b> "If the DB leaks, attackers get salted hashes, not passwords. We'd rotate tokens and force resets — and we never log or return hashes."</div>
+
+<h3>Permissions (layer 1 — endpoint level)</h3>
+<ul>
+<li><code>AllowAny</code> — login / register (public).</li>
+<li><code>IsAuthenticated</code> — report endpoints. A logged-out call: 401.</li>
+<li>Custom classes — e.g. <code>IsAuthorityUser</code> for department dashboards.</li>
+<li>Enforced in the view layer, server-side — never in the Flutter UI, which anyone can bypass.</li>
+</ul>
+
+<h3>Object-level authorization (layer 2 — per row)</h3>
+<ul>
+<li><b>Queryset filtering</b>: <code>Report.objects.filter(owner=self.request.user)</code> — listing only ever returns your rows.</li>
+<li><b>Object check</b>: <code>if report.owner != request.user: raise PermissionDenied</code> on detail/update/delete.</li>
+</ul>
+<div class="say"><b>&#9889; The money line:</b> "The filter lives in the queryset, not the UI. Someone with curl can't read others' reports, because the query literally only selects rows where owner = the token's user."</div>
+
+<h3>User ownership</h3>
+<ul>
+<li>The <code>owner</code> FK is set <b>server-side</b>: <code>serializer.save(owner=request.user)</code>.</li>
+<li>Client-supplied <code>owner</code> fields are declared <code>read_only</code> and ignored — it's structurally impossible to spoof.</li>
+<li>Trusting client <code>owner</code> would be a classic IDOR / mass-assignment vulnerability.</li>
+</ul>
+
+<h3>Input validation</h3>
+<ul>
+<li>Flutter validates for <b>UX</b>; Django (serializers) validates for <b>security</b> — only the server's check is trustworthy.</li>
+<li>What it catches: wrong types, missing fields, max lengths, coordinate ranges (−90..90 / −180..180), file type, 5 MB cap, oversize payloads → 400 before anything touches a model.</li>
+</ul>
+
+<h3>CORS / CSRF</h3>
+<ul>
+<li><b>CORS</b>: a <i>browser</i> rule — which origins may call your API with JS. Native Flutter ignores CORS entirely; the real defense is auth + tokens.</li>
+<li><b>CSRF</b>: forged requests riding a victim's <i>cookie</i>. We auth by header token, not cookie → the classic CSRF vector doesn't apply.</li>
+<li>We still set CORS to known origins and protect cookie-based login forms.</li>
+</ul>
+
+<h3>Environment variables / secrets</h3>
+<ul>
+<li>Secrets (<code>SECRET_KEY</code>, DB password, R2 keys) live in env vars — never in code or git.</li>
+<li>Local: <code>.env</code> (gitignored). Production: Render's Environment tab injects them.</li>
+<li><code>DEBUG=False</code> in prod — a debug-stack-trace page publicly leaked is a real breach.</li>
+<li>Rotating a secret = changing an env var + redeploy, no code change.</li>
+</ul>
+
+<!-- ==================== PART 3 ==================== -->
+<div class="pagebreak"></div>
+<h2>3 · Image Upload Lifecycle (the full journey)</h2>
+<ol>
+<li>Flutter builds <code>multipart/form-data</code>: image file + GPS lat/lng + description, over HTTPS.</li>
+<li>DRF's <code>MultiPartParser</code> takes it apart; the serializer validates everything (size cap, types, ranges). Faster than base64, no JSON-binary hack.</li>
+<li>Django writes the image to <b>R2</b> via <b>django-storages</b> (which calls <b>boto3</b>) at <code>reports/{id}/photo.jpg</code>.</li>
+<li>Only the <b>URL/key</b> is stored in PostgreSQL — never the blob (databases are bad at blobs).</li>
+<li>Optionally <b>presigned URLs</b>: server signs a short-lived URL, Flutter uploads directly to R2 → zero server bandwidth for the bytes; download links can expire for privacy.</li>
+<li>Background worker (Celery) then runs AI severity + duplicate detection off the request path.</li>
+</ol>
+
+<h3>Multipart vs JSON</h3>
+<p>JSON is UTF-8 text — it can't carry binary. base64-encoding a 5 MB image → ~6.7 MB of text (33% overhead). Multipart streams raw bytes alongside the text fields. Django/DRF handle the parsing automatically.</p>
+
+<h3>R2 vs S3 vs Firebase</h3>
+<ul>
+<li><b>R2</b> is <b>S3-compatible</b> (same API contract) but charges <b>zero egress fees</b> and rides Cloudflare's CDN — ideal for an image-heavy app.</li>
+<li>S3-compat means the same storage code works anywhere — switching providers is config, not a rewrite.</li>
+<li><b>django-storages</b> = framework integration (your model field just works). <b>boto3</b> = the low-level client (used for presigning and custom object ops).</li>
+<li><b>Firebase Storage</b> is fast to start but locks you into Google's stack and pricing.</li>
+</ul>
+
+<h3>Presigned URLs — how to explain</h3>
+<div class="say"><b>&#9889; Say This:</b> "Presigned URLs are short-lived, one-action, one-object signed URLs. For upload: Flutter PUTs straight to R2 so images never pass through our server. For download: links expire in minutes, so private images stay private. The egress is free — it never touches Django."</div>
+
+<pre>s3 = boto3.client("s3",
+    endpoint_url=os.environ["R2_ENDPOINT"],
+    aws_access_key_id=os.environ["R2_ACCESS_KEY"],
+    aws_secret_access_key=os.environ["R2_SECRET_KEY"])
+url = s3.generate_presigned_url(
+    "put_object",
+    Params={"Bucket": "pothole-images", "Key": f"reports/{id}/photo.jpg"},
+    ExpiresIn=300)</pre>
+
+<!-- ==================== PART 4 ==================== -->
+<div class="pagebreak"></div>
+<h2>4 · App ↔ Server Communication &amp; Failure Behavior</h2>
+
+<h3>How the app communicates</h3>
+<ul>
+<li>Over <b>HTTPS</b> with <b>JSON</b> bodies. The app never touches the DB — the DB isn't on the public internet.</li>
+<li>Flutter repository pattern: widgets → repository → HTTP client → JSON → Dart models. UI never knows about networking.</li>
+<li>Errors are HTTP codes with structured JSON bodies; the app maps them to UI states (400 bad input, 401 re-login, 403 forbidden, 404 missing, 429 throttled, 503 down).</li>
+</ul>
+
+<h3>What happens if the server goes down</h3>
+<ul>
+<li><b>Client side:</b> retry with backoff, an offline queue for the in-progress report, clear user messaging ("saved — uploads when back online").</li>
+<li><b>Server side:</b> Render health checks auto-restart a crashed service.</li>
+<li><b>DB down:</b> API returns 503; Postgres ACID means no torn writes on recovery.</li>
+<li><b>R2 down:</b> keep metadata, retry the image upload with idempotent unique keys — image and metadata writes are coordinated with retry, not one fragile transaction.</li>
+</ul>
+
+<h3>Scaling: 1,000 → 1,000,000 users (talk in layers)</h3>
+<table>
+<tr><th>Scale</th><th>What you add</th></tr>
+<tr><td>1,000</td><td>One Django server + one Postgres + one R2 bucket.</td></tr>
+<tr><td>10,000</td><td>CDN/cache in front of images · PgBouncer connection pooling · indexes on hot columns + GiST on location.</td></tr>
+<tr><td>100,000</td><td>Horizontal Django scale behind a load balancer (stateless token auth = no sticky sessions) · Redis for queues/cache.</td></tr>
+<tr><td>1,000,000</td><td>Read replicas (reads to replicas, writes to primary) · Celery workers take AI/dedup off the request path · partition by region · PostGIS keeps geo queries indexed.</td></tr>
+</table>
+<div class="say"><b>&#9889; Say This:</b> "Django is stateless with token auth, so scaling is adding instances behind a load balancer. Bottleneck checkpoints: database (→ pooling + replicas), heavy jobs (→ worker queue), image egress (→ free on R2, CDN-cached)."</div>
+
+<!-- ==================== PART 5 ==================== -->
+<div class="pagebreak"></div>
+<h2>5 · Tech-by-Tech Reference (your full checklist)</h2>
+
+<h3>Core</h3>
+
+<h4>Python</h4>
+<p>The language of the backend. Dynamically typed, huge ecosystem. CPU-heavy work (AI scoring) is offloaded to workers because of the GIL — API threads stay I/O-bound and responsive.</p>
+<div class="say"><b>&#9889; Say This:</b> "Python powers the whole backend — Django on top — chosen for ecosystem and build speed. The bottleneck isn't Python, it's queries and I/O; hot paths use PostGIS SQL, and AI work runs on background workers."</div>
+
+<h4>Django</h4>
+<p>Full web framework, MVT: models (tables), views (logic), URLs (routing), migrations (versioned schema), settings, middleware, admin. Middleware wraps every request (auth, CORS, logging).</p>
+<div class="say"><b>&#9889; Say This:</b> "Django is the backbone — routing, auth, ORM, migrations and security defaults for free, so we spend time on business logic, not plumbing."</div>
+
+<h4>Django REST Framework</h4>
+<p>The 5 components: <b>Serializers</b> (JSON ↔ models + validation), <b>Views/Viewsets</b> (list/create/retrieve/update/destroy), <b>Routers</b> (auto URLs), <b>Permission classes</b>, <b>Auth backends</b>. Request flow: header → auth backend → permission class → serializer validate → view logic → serialized JSON + status code.</p>
+<div class="say"><b>&#9889; Say This:</b> "DRF gives serializers for validation, permission classes for authorization, and viewsets that auto-generate our REST endpoints."</div>
+
+<h4>REST API</h4>
+<table>
+<tr><th>Method</th><th>URL</th><th>Action</th></tr>
+<tr><td>POST</td><td><code>/api/auth/login/</code></td><td>login → token</td></tr>
+<tr><td>GET</td><td><code>/api/reports/</code></td><td>list my reports</td></tr>
+<tr><td>POST</td><td><code>/api/reports/</code></td><td>create (multipart)</td></tr>
+<tr><td>GET</td><td><code>/api/reports/{id}/</code></td><td>one report</td></tr>
+<tr><td>GET</td><td><code>/api/reports/nearby/?lat=&amp;lng=&amp;radius=</code></td><td>geo query</td></tr>
+</table>
+<p>Stateless, resource-URLs, standard verbs, meaningful status codes.</p>
+
+<h4>HTTP / HTTPS</h4>
+<ul>
+<li>Request anatomy: request line, headers (<code>Content-Type</code>, <code>Authorization</code>), body.</li>
+<li>HTTPS = HTTP + TLS: handshake, certificate from a CA, encrypted data. Hashes protect at-rest; HTTPS protects the password/token <b>in transit</b> — a WiFi sniffer reads plain HTTP instantly.</li>
+<li>We force SSL redirect + HSTS in production.</li>
+</ul>
+
+<h4>JSON</h4>
+<p>The API contract — structured, debuggable, natively parsed by Flutter. JSON can't carry binary → files go multipart, and only URLs live in JSON.</p>
+
+<h4>PostgreSQL</h4>
+<ul>
+<li>Tables + typed columns, <b>foreign keys enforced</b> (no orphan rows), <b>ACID</b> (all-or-nothing writes), <b>indexes</b> (speed reads, trade write speed).</li>
+<li>ORM generates safe parameterized SQL: <code>SELECT * FROM reports WHERE owner_id = ?</code> — input is a parameter, never concatenated (that's the SQL-injection defense).</li>
+<li>Postgres vs MySQL: more features (JSONB, PostGIS) and stricter correctness — fits geo data.</li>
+</ul>
+
+<h4>Django ORM</h4>
+<ul>
+<li>Python objects ↔ DB tables; lazy QuerySets execute SQL only when evaluated.</li>
+<li>Avoid <b>N+1</b>: <code>select_related('owner')</code> → one JOIN, one query.</li>
+<li>Raw SQL available (PostGIS-heavy report queries) when the ORM gets awkward — 95% stays in the ORM.</li>
+</ul>
+
+<h4>PostGIS</h4>
+<ul>
+<li>Extension → spatial types (<code>Point</code>), SRID 4326 = WGS84 lat/lng.</li>
+<li><code>ST_DWithin(geom,p,m)</code> — nearby/duplicates · <code>ST_Distance</code> — meters · <code>ST_Contains</code> — which district (routing).</li>
+<li>GiST spatial indexes keep geo fast at scale; no per-row Python math.</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h3>Authentication &amp; Security</h3>
+<ul>
+<li><b>AuthN vs AuthZ</b>: "who are you?" (token) vs "may you do this?" (permission). An authenticated user without permission gets 403, not 401.</li>
+<li><b>Token/session</b>: we use stateless double-click tokens in the Authorization header — mobile-friendly, horizontally scalable, revocable. JWT is a config-change future upgrade but harder to revoke.</li>
+<li><b>Password hashing</b>: salted, slow, one-way (PBKDF2 default in Django). Verify = hash input + compare. Plaintext never touches the DB.</li>
+<li><b>Permissions</b>: DRF classes (<code>AllowAny</code>, <code>IsAuthenticated</code>, custom role classes) — server-side gate per endpoint.</li>
+<li><b>Object-level authz</b>: queryset filter + <code>has_object_permission</code>; per-row owner checks.</li>
+<li><b>User ownership</b>: <code>save(owner=request.user)</code>; client <code>owner</code> fields read-only; IDOR spoofing structurally impossible.</li>
+<li><b>Input validation</b>: serializer = the security gate (types, sizes, ranges, lengths, file caps).</li>
+<li><b>CORS/CSRF</b>: CORS is a browser rule (mobile ignores it); token-in-header means no cookie → CSRF classic vector gone.</li>
+<li><b>Env vars/secrets</b>: never in code/git; DEBUG off in prod; rotation = env change + redeploy.</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h3>File Handling</h3>
+<ul>
+<li><b>multipart/form-data</b>: one request, file + fields, raw bytes streamed — no base64 bloat.</li>
+<li><b>Cloudflare R2</b>: object storage, zero egress, S3-compatible, CDN-backed.</li>
+<li><b>S3-compatible</b>: standard bucket/key/object contract; provider-agnostic code.</li>
+<li><b>boto3</b>: low-level SDK for presigned URLs and direct object ops.</li>
+<li><b>django-storages</b>: framework glue so model <code>ImageField</code> transparently uses R2.</li>
+<li><b>Presigned URLs</b>: short-lived, scoped, one-action signed links — direct upload, expiring download.</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h3>Deployment</h3>
+<ul>
+<li><b>Git/GitHub</b>: feature branches → PR → review → merge to <code>main</code>; <code>.gitignore</code> keeps secrets out.</li>
+<li><b>Render</b>: push → build → migrate → Gunicorn → health check green. Managed Postgres + env injection.</li>
+<li><b>Production API</b>: DEBUG off, ALLOWED_HOSTS locked, secrets from env, Gunicorn (not runserver), HTTPS forced, throttled, health checks, error logging.</li>
+<li><b>HTTPS</b>: TLS terminated at Render's edge (auto Let's Encrypt), SSL redirect + HSTS.</li>
+<li><b>Environment variables</b>: the only place production secrets live; per-environment separation (dev vs prod).</li>
+<li><b>Health checks</b>: unauthenticated <code>/health/</code> that actually pings the DB → 200 only when wired; Render auto-restarts on failure.</li>
+</ul>
+
+<pre># health endpoint — checks a real dependency, not a warm-and-fuzzy 200
+def health(request):
+    try:
+        connection.ensure_connection()
+        return JsonResponse({"status": "ok"}, status=200)
+    except OperationalError:
+        return JsonResponse({"status": "unhealthy"}, status=503)</pre>
+
+<!-- ==================== PART 6 ==================== -->
+<div class="pagebreak"></div>
+<h2>6 · Critical Demo Flow (memorize this script)</h2>
+<ol>
+<li><b>User logs in</b> — Flutter → <code>POST /api/auth/login/</code> → Django checks the hash → returns a token.</li>
+<li><b>Backend authenticates</b> — every request carries the token; DRF resolves it to a user.</li>
+<li><b>User reports an issue</b> — Flutter builds multipart: image + lat/lng + description + category (e.g. pothole, broken streetlight, water leak).</li>
+<li><b>Django validates</b> — types, coordinate ranges, 5 MB cap. Bad input → 400 immediately.</li>
+<li><b>Image → object storage</b> — streamed to R2; only the URL lands in the DB.</li>
+<li><b>Metadata → PostgreSQL</b> — report row with <code>owner</code> (server-set), PostGIS <code>POINT</code>, <code>image_url</code>, status.</li>
+<li><b>AI analysis</b> — Celery worker scores the image: is it really the claimed issue? how severe?</li>
+<li><b>Duplicate detection</b> — PostGIS <code>ST_DWithin</code> ~30 m on recent reports → merge/link instead of spamming the authority.</li>
+<li><b>Severity / priority</b> — image analysis + location + category (main road + deep + pothole = P0).</li>
+<li><b>Department routing</b> — <code>ST_Contains</code> against district polygons + category → the right department.</li>
+<li><b>Authority receives issue</b> — ranked, deduplicated, verified issue in their dashboard + notification.</li>
+</ol>
+
+<h3>The 30-second spoken version</h3>
+<div class="say"><b>&#9889; Recite:</b> "The user logs in — Django hashes and checks the password, returns a token. Every call carries that token; DRF resolves the user and permission classes gate the endpoint. The user reports an issue: one multipart upload — image, lat/lng, description — over HTTPS. The serializer validates everything; garbage gets a 400 before touching a model. Ownership is injected server-side — always the authenticated user. The image streams to R2; Postgres stores only the URL. Off the request path, a worker runs AI (does the image match the claimed issue? severity), duplicate detection via ST_DWithin, and routing via ST_Contains against district polygons + category. The authority sees a ranked, deduped, verified issue — and the citizen gets notified when it's resolved, which brings them back."</div>
+
+<!-- ==================== PART 7 ==================== -->
+<div class="pagebreak"></div>
+<h2>7 · Mentor Probe Prep (the questions they ask beyond your list)</h2>
+
+<h3>7.1 "Show me your code" — six spots to have ready</h3>
+<ol>
+<li><b>models.py</b> — <code>ForeignKey(User)</code> (ownership), <code>PointField</code> (PostGIS), <code>ImageField</code> (R2), severity choices.</li>
+<li><b>serializers.py</b> — field types, max lengths, 5 MB cap, <code>read_only_fields = ("owner","id","severity")</code>.</li>
+<li><b>views.py viewset</b> — <code>get_queryset</code> filtered by <code>request.user</code>, <code>permission_classes</code>, <code>save(owner=request.user)</code>.</li>
+<li><b>The PostGIS query</b> — the <code>ST_DWithin</code> nearby/duplicate lookup.</li>
+<li><b>settings.py</b> — <code>DATABASES</code> (django.contrib.postgres), R2 storage env vars, <code>DEBUG</code> from env.</li>
+<li><b>/health/ endpoint</b> — the DB-connectivity check.</li>
+</ol>
+<div class="warn"><b>Pro move:</b> know which <i>files</i> you can open in under 5 seconds. Fumbling for the viewset while a mentor waits is the #1 credibility killer.</div>
+
+<h3>7.2 Tradeoff questions (answer cold)</h3>
+<ul>
+<li><b>Django vs FastAPI/Flask</b> — "Batteries included — auth, ORM, migrations, security defaults — so we don't rebuild foundations. FastAPI wins on raw throughput/async; Django won on end-to-end build speed for a CRUD + AI app."</li>
+<li><b>Postgres vs DynamoDB</b> — "DynamoDB scales horizontally beautifully, but we need relationships, transactions, and geo — none are its home turf. Postgres + PostGIS nails all three in one database."</li>
+<li><b>R2 vs Firebase Storage</b> — "Firebase is quick to start but locks us into Google's stack and pricing; R2 is S3-compatible (portable code) with zero egress fees."</li>
+<li><b>Token vs JWT</b> — "Opaque tokens: simplest, instantly revocable server-side. JWT's statelessness is attractive at massive scale — a config change to adopt, but harder to revoke."</li>
+<li><b>"What would you cut if you rebuilt it?"</b> — "The admin panel and template layer — API-only product, clients never touch them. Keep everything else; security defaults are worth the weight."</li>
+</ul>
+
+<h3>7.3 Edge cases (pick two, know them brutally)</h3>
+<ul>
+<li><b>Duplicate reports</b> — "On create, <code>ST_DWithin</code> against recent unprocessed reports within ~30 m. If found we link/merge — increment an occurrence count — instead of spamming the authority. We link, we don't auto-delete; humans decide eventually."</li>
+<li><b>Image that doesn't match the claimed issue</b> — "AI confidence below threshold → human-review queue. Mislabeled or junk images never reach the authority's action feed. All uploads still pass validation first."</li>
+<li><b>Oversized upload (DoS)</b> — "Serializer caps at 5 MB, multipart streams bytes, and DRF throttling limits requests per user per minute. Rejected with an early status code before buffering."</li>
+<li><b>GPS spoofing</b> — "We validate ranges and bound trust: flag outliers, show reverse-geocoded location so the authority can sanity-check. We don't pretend to solve AR spoofing."</li>
+<li><b>(0,0) / NaN coords</b> — "Serializer rejects NaN and coerces invalid flags; (0,0) — the Gulf of Guinea — routes to a manual triage queue instead of crashing routing."</li>
+</ul>
+
+<h3>7.4 Business one-liners (mentors often end here)</h3>
+<ul>
+<li><b>Customer</b>: "Two-sided — citizens report; municipal road authorities consume. The authority dashboard is where revenue lives."</li>
+<li><b>Revenue</b>: "SaaS subscription per authority, tiered by population coverage + analytics. Citizens' side is free — they're the data source."</li>
+<li><b>Why authorities pay</b>: "Auto-deduped, severity-ranked, GPS-precise, AI-verified issues — hours saved per week in their response teams."</li>
+<li><b>Moat</b>: "Data density — more verified, deduplicated reports per region than anyone, plus routing models tuned to each jurisdiction."</li>
+<li><b>Retention</b>: "The loop closes — 'your pothole was fixed' drives the next report. Authority wins, citizen wins, we get better data each cycle."</li>
+</ul>
+
+<h3>7.5 Sound evidence-based with numbers</h3>
+<ul>
+<li><b>Nearby at 1M rows</b>: "GiST spatial index → index-depth bound, milliseconds; a table-wide Haversine degrades linearly — the case for PostGIS in one sentence."</li>
+<li><b>Image path</b>: "5 MB cap, streamed to R2; the DB stores a ~60-byte URL. Egress is free."</li>
+<li><b>Upload UX</b>: "The API responds once metadata + storage commit; AI runs async on a worker — the user gets instant confirmation and we grade in the background."</li>
+<li><b>Scaling</b>: "Stateless Django + token auth → add instances behind a load balancer. Checkpoints: DB (PgBouncer + replicas), workers (queue), image egress (free on R2)."</li>
+</ul>
+
+<div class="pagebreak"></div>
+<h2>8 · Rapid-Fire One-Liners (final cheat sheet)</h2>
+<div class="box">
+<ul>
+<li><b>Why token auth, not session?</b> — Mobile apps don't do cookies well; tokens survive restarts, scale across servers, and are standard for API apps.</li>
+<li><b>Why R2, not S3?</b> — S3-compatible (django-storages/boto3 unchanged) but no egress fees — a real cost win for image-heavy apps.</li>
+<li><b>Why not Firebase?</b> — Great for prototyping; locks you in. Portable Django + Postgres + object storage is judge-impressive on architecture questions.</li>
+<li><b>Health checks</b> — Render pings <code>/health/</code>, which checks the DB and returns 200; failure → auto-restart.</li>
+<li><b>AuthN vs AuthZ</b> — AuthN answers <i>who are you?</i>; AuthZ answers <i>are you allowed?</i></li>
+<li><b>The trust rule</b> — ownership/roles are always derived server-side from the token; anything from the client body is treated as untrusted input.</li>
+<li><b>The security-layers answer</b> — HTTPS (in transit) + hashing (at rest) + token auth (identity) + permissions/querysets (access) + serializer validation (input) + env secrets (configuration).</li>
+<li><b>The golden thread</b> — Flutter ships a token over HTTPS; every call is authenticated and object-authorized; images stream to R2; metadata is written transactionally to Postgres with PostGIS thinking; Render + env vars + health checks keep it public, secret-safe, and self-healing.</li>
+</ul>
+</div>
+
+<p style="margin-top:18px; font-size:11px; color:#5a6b7a;">End of master guide. Read twice, then drill each <b>&#9889; Say This</b> box out loud until it rolls off the tongue.</p>
+
+</body>
+</html>
