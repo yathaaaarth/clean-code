@@ -22,9 +22,11 @@ Write the **absolute minimum** code required to solve the exact problem. Optimiz
 - **Handle only what's needed.** Add error handling, validation, or edge cases **only** if the user explicitly asks for them.
 
 ## Comments & Clarity
-- **Comment only when non-obvious.** Skip comments for trivial things (`i++`, `return result`).
-- **Keep comments brief.** Use short, inline comments or 1-line explanations. No long paragraphs.
-- **Explain "why", not "what".** If you must comment, focus on the reasoning behind a weird workaround or constraint.
+- **Add brief comments for review clarity.** Include short one-line comments that explain **what** this code does and **why** it's here, especially for logic, functions, or non-obvious blocks.
+- **Keep comments minimal.** Don't comment on every line. Comment only where it helps someone reviewing the code quickly understand intent.
+- **Explain "why" when needed.** If there's a workaround, constraint, or decision, briefly state why.
+- **Avoid redundant comments.** Skip comments that just restate the code (e.g. `i++ // increment`).
+- **Use natural, concise language.** Prefer `// Parse user input to validate email` over long explanations.
 
 ## Output Discipline
 - **No test files unless asked.** Don't generate unit tests, integration tests, or mocks unprompted.
